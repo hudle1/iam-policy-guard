@@ -24,6 +24,22 @@ def test_security_warning_fails():
     assert v.result is Result.FAIL
 
 
+def test_unsupported_policy_fails_closed():
+    v = decide([], unsupported={"main.tf::aws_iam_policy.x": "uses jsonencode"})
+    assert v.result is Result.FAIL
+    assert "aws_iam_policy_document" in v.reasons[0]
+
+
+def test_run_errors_fail_closed():
+    v = decide([], errors=["Access Analyzer call failed (Throttling)"])
+    assert v.result is Result.FAIL
+
+
+def test_skipped_access_check_does_not_fail():
+    v = decide([PolicyCheckResults("trust", (), Result.PASS, None)])
+    assert v.result is Result.PASS
+
+
 def test_verdict_module_cannot_see_llm_output():
     """Security control: the decision path must not import the LLM module or SDK.
 

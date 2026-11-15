@@ -58,6 +58,9 @@ terraform destroy
 _TODO_
 
 ## Roadmap
+- **Rename detection** (`git diff -M`): a renamed `.tf` file currently looks like a brand-new policy, so it loses its baseline and skips `CheckNoNewAccess`. Pair old and new paths so renamed files keep their baseline.
+- **Stricter baseline for brand-new policies**: a new policy has nothing to compare against, so today only `ValidatePolicy` and the deny list apply. Compare it against a minimal reference policy (or require an explicit approval label) instead.
+
 v1 non-goals: resource policies (S3/KMS/SQS), SCPs, auto-fix commits, `terraform plan`-based extraction, multi-account.
 
 ## Skills demonstrated
