@@ -21,11 +21,24 @@ concurrency:
 
 jobs:
   guard:
-    # Skip fork PRs explicitly (they would fail on missing OIDC/secrets anyway).
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    # No job-level `if`: a skipped job counts as PASSING for a required status check, so
+    # skipping fork PRs would let them merge unchecked. Fork PRs FAIL instead (first step).
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # Fork PRs get no OIDC token or secrets under `pull_request`, so they can't be checked.
+      # Fail closed before checkout: the fork's code is never checked out or run.
+      - name: Block fork PRs (fail closed)
+        if: github.event.pull_request.head.repo.full_name != github.repository
+        env:
+          MSG: >-
+            Fork PRs can't be checked automatically: no AWS credentials. A maintainer must
+            review the IAM changes and re-run from a branch in this repo.
+        run: |
+          echo "::error title=IAM Policy Guard::$MSG"
+          echo "## ❌ IAM Policy Guard: $MSG" >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+
       # TODO: pin every action to a full commit SHA before shipping (Dependabot keeps them updated).
       - uses: actions/checkout@v4
         with:
