@@ -235,3 +235,32 @@ def test_ai_section_only_when_key_set(gitrepo, guard, monkeypatch):
 
     assert "AI explanation" not in without_key
     assert "## AI explanation (advisory only" in with_key
+
+
+def test_commented_risky_policy_fails_on_checks_not_as_unsupported(gitrepo, guard):
+    """Regression for the PR #7 demo: comments inside the document must not hide the policy."""
+    base = gitrepo.commit({"main.tf": doc_tf("app", ["s3:GetObject"], BUCKET)})
+    risky = (
+        'data "aws_iam_policy_document" "app" {\n'
+        "  statement {\n"
+        '    actions   = ["s3:GetObject"]\n'
+        f"    resources = {json.dumps(BUCKET)}\n"
+        "  }\n"
+        "\n"
+        "  # DEMO ONLY: intentionally risky.\n"
+        "  statement {\n"
+        "    actions = [\n"
+        "      # privilege escalation\n"
+        '      "iam:PassRole",\n'
+        "    ]\n"
+        '    resources = ["*"] # any role\n'
+        "  }\n"
+        "}\n"
+    )
+    head = gitrepo.commit({"main.tf": risky})
+    code, report, _ = guard(base, head)
+
+    assert code == 1
+    assert "Unsupported policies" not in report
+    assert "CheckNoNewAccess FAIL" in report
+    assert "CheckAccessNotGranted FAIL" in report
