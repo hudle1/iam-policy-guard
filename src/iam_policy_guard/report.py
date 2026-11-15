@@ -23,8 +23,16 @@ class RunSummary:
     explanations: dict[str, str] | None = None  # None = AI section omitted entirely
 
 
-def code(text: str) -> str:
-    safe = text.replace("`", "'").replace("|", "\\|").replace("\r", " ").replace("\n", " ")
+def code(text: str, in_table: bool = False) -> str:
+    """Render untrusted text as inline code that can't break out of its context.
+
+    Backticks would end the code span and newlines would end a heading or list item, so
+    both are neutralized everywhere. A pipe only needs escaping inside a table cell; in a
+    heading or list GitHub would show the backslash literally.
+    """
+    safe = text.replace("`", "'").replace("\r", " ").replace("\n", " ")
+    if in_table:
+        safe = safe.replace("|", "\\|")
     return f"`{safe}`"
 
 
@@ -46,26 +54,42 @@ def _ang_cell(c: PolicyCheckResults) -> str:
     return c.access_not_granted.value
 
 
+def _reason_line(reason: str, policy_ids: set[str]) -> str:
+    """Reasons start with a policy ID (an attacker-chosen path); render that part as code."""
+    for pid in policy_ids:
+        prefix = f"{pid}: "
+        if reason.startswith(prefix):
+            return f"- {code(pid)}: {reason[len(prefix):]}"
+    return f"- {reason}"  # run-level errors: our own text, no policy ID
+
+
 def render(verdict: Verdict, run: RunSummary) -> str:
     passed = verdict.result is Result.PASS
     lines = [f"# IAM Policy Guard: {'✅ PASS' if passed else '❌ FAIL'}", ""]
 
     if verdict.reasons:
+        policy_ids = {c.policy_id for c in run.checks} | set(run.unsupported)
         lines += ["**Why it failed**", ""]
-        lines += [f"- {r}" for r in verdict.reasons]
+        lines += [_reason_line(r, policy_ids) for r in verdict.reasons]
         lines.append("")
 
+    # One sub-heading per policy and a narrow two-column table, so long policy IDs never
+    # force the PR comment to scroll sideways.
     lines += ["## Results", ""]
     if run.checks:
-        lines += ["| Policy | Check | Result |", "| --- | --- | --- |"]
         for c in run.checks:
-            pid = code(c.policy_id)
-            lines.append(f"| {pid} | ValidatePolicy | {_validate_cell(c)} |")
-            lines.append(f"| {pid} | CheckNoNewAccess | {_nna_cell(c)} |")
-            lines.append(f"| {pid} | CheckAccessNotGranted | {_ang_cell(c)} |")
+            lines += [
+                f"### {code(c.policy_id)}",
+                "",
+                "| Check | Result |",
+                "| --- | --- |",
+                f"| ValidatePolicy | {_validate_cell(c)} |",
+                f"| CheckNoNewAccess | {_nna_cell(c)} |",
+                f"| CheckAccessNotGranted | {_ang_cell(c)} |",
+                "",
+            ]
     else:
-        lines.append("No changed IAM policies were checked.")
-    lines.append("")
+        lines += ["No changed IAM policies were checked.", ""]
 
     if run.unsupported:
         lines += [
@@ -74,10 +98,8 @@ def render(verdict: Verdict, run: RunSummary) -> str:
             "These could not be read statically, so they were not checked. Each one fails the "
             'run: rewrite it as a `data "aws_iam_policy_document"` block or a JSON heredoc.',
             "",
-            "| Policy | Reason |",
-            "| --- | --- |",
         ]
-        lines += [f"| {code(p)} | {why} |" for p, why in sorted(run.unsupported.items())]
+        lines += [f"- {code(p)}: {why}" for p, why in sorted(run.unsupported.items())]
         lines.append("")
 
     if run.skipped_files:
