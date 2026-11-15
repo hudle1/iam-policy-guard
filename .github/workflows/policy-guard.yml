@@ -1,0 +1,58 @@
+name: IAM Policy Guard
+
+# `pull_request`, never `pull_request_target`: PR code never runs with base-repo secrets,
+# and fork PRs get no OIDC token or secrets.
+on:
+  pull_request:
+    paths:
+      - "**/*.tf"
+      - "examples/**"
+
+permissions:
+  contents: read
+  id-token: write       # OIDC token for AWS
+  pull-requests: write  # post the report comment
+
+concurrency:
+  group: policy-guard-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  guard:
+    # Skip fork PRs explicitly (they would fail on missing OIDC/secrets anyway).
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # TODO: pin every action to a full commit SHA before shipping (Dependabot keeps them updated).
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # need the base branch to diff policies
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install .
+
+      - name: Configure AWS credentials (OIDC, no keys)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: policy-guard-pr-${{ github.event.pull_request.number }}
+
+      - name: Run checks
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python -m iam_policy_guard --base "$BASE_SHA" --head "$HEAD_SHA" --report report.md
+
+      # Verdict = exit code of the step above (Access Analyzer only). The LLM text is advisory.
+      - name: Comment report on PR
+        if: always() && hashFiles('report.md') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr comment ${{ github.event.pull_request.number }} --body-file report.md --edit-last --create-if-none
