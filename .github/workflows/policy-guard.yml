@@ -2,11 +2,13 @@ name: IAM Policy Guard
 
 # `pull_request`, never `pull_request_target`: PR code never runs with base-repo secrets,
 # and fork PRs get no OIDC token or secrets.
+#
+# No `paths` filter on purpose: `guard` is a required status check on main, and a
+# path-filtered workflow never reports on PRs outside its paths, which would leave those
+# PRs stuck at "Expected — Waiting for status". With no changed .tf files the CLI checks
+# nothing, makes no Access Analyzer calls ($0) and passes.
 on:
   pull_request:
-    paths:
-      - "**/*.tf"
-      - "examples/**"
 
 permissions:
   contents: read
