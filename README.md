@@ -32,6 +32,10 @@ See [docs/architecture.md](docs/architecture.md).
 
 Full analysis: [docs/threat-model.md](docs/threat-model.md).
 
+## Known limitations
+- **Terraform references aren't resolved.** Extraction is static, so a policy built from variables, locals, `jsonencode()` or `file()` can't be read. Those policies fail closed, and the report asks for a literal `aws_iam_policy_document` block or a JSON heredoc.
+- **`infra/` is excluded.** The guard's own bootstrap role is written with references (the OIDC provider ARN, variables), so it would always fail closed. The workflow passes `--exclude infra/`, and those files are listed as skipped in every report rather than silently ignored.
+
 ## Quick start
 New to AWS? Start with the full [setup guide](docs/setup-guide.md): account creation, root lockdown, SSO, and tools, with the pitfalls called out.
 
@@ -59,6 +63,7 @@ _TODO_
 
 ## Roadmap
 - **Rename detection** (`git diff -M`): a renamed `.tf` file currently looks like a brand-new policy, so it loses its baseline and skips `CheckNoNewAccess`. Pair old and new paths so renamed files keep their baseline.
+- **Resolve Terraform references**: read policies from `terraform plan` JSON (`terraform show -json`), or substitute worst-case wildcards for unresolved values, so policies that use variables can be checked instead of failing closed.
 - **Stricter baseline for brand-new policies**: a new policy has nothing to compare against, so today only `ValidatePolicy` and the deny list apply. Compare it against a minimal reference policy (or require an explicit approval label) instead.
 
 v1 non-goals: resource policies (S3/KMS/SQS), SCPs, auto-fix commits, `terraform plan`-based extraction, multi-account.
