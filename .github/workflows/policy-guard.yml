@@ -51,6 +51,9 @@ jobs:
         run: python -m iam_policy_guard --base "$BASE_SHA" --head "$HEAD_SHA" --report report.md
 
       # Verdict = exit code of the step above (Access Analyzer only). The LLM text is advisory.
+      # Sticky comment: --create-if-none needs gh >= 2.68.0 (runner ubuntu-24.04 ships 2.103.x).
+      # --edit-last edits the newest github-actions[bot] comment, so keep this the only
+      # workflow that comments on PRs.
       - name: Comment report on PR
         if: always() && hashFiles('report.md') != ''
         env:

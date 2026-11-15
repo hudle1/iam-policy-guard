@@ -8,7 +8,7 @@ A GitHub Action that runs AWS IAM Access Analyzer against every Terraform IAM ch
 Overly broad IAM policies are one of the most common root causes in cloud breaches, and they usually arrive through ordinary pull requests that reviewers skim. Static linters catch syntax and obvious wildcards, but not "this change quietly grants new access." Access Analyzer's custom policy checks answer that question with automated reasoning. The missing piece is explaining the finding in plain language at review time, which is where an LLM helps, as long as it can't overrule the deterministic check.
 
 ## Demo
-_TODO (Sun): screenshot of the PR comment on `examples/risky-change`._
+_TODO: screenshot of the PR comment on a PR that widens `examples/demo/main.tf`._
 
 ## Architecture
 See [docs/architecture.md](docs/architecture.md).
@@ -16,11 +16,11 @@ See [docs/architecture.md](docs/architecture.md).
 ## How it works
 1. A PR touches `*.tf`; the workflow runs on `pull_request` (never `pull_request_target`).
 2. The job gets short-lived AWS credentials via GitHub OIDC. No access keys exist.
-3. IAM policy documents are extracted from the base and head commits.
-4. Access Analyzer runs `ValidatePolicy`, `CheckNoNewAccess` (head vs base) and `CheckAccessNotGranted` (deny list).
-5. The verdict is computed from those results only; the job's exit code is the gate.
-6. Claude gets the policy and findings as untrusted data and writes an advisory explanation and suggested rewrite.
-7. The report is posted as a single, updated PR comment.
+3. IAM policy documents are extracted statically (python-hcl2, no `terraform plan`) from the changed `.tf` files at the base and head commits: `data "aws_iam_policy_document"` blocks and inline policies written as a JSON heredoc or JSON string. Files under the exclude list (default `tests/fixtures/`) are skipped and listed in the report.
+4. For each new or changed policy, Access Analyzer runs `ValidatePolicy`, `CheckNoNewAccess` (head vs base; skipped for brand-new policies) and `CheckAccessNotGranted` (deny list). Documents with a `Principal` (role trust policies) are checked as resource policies, and the deny-list check is skipped for them. Policies identical to base aren't re-checked.
+5. The verdict comes from those results only, and it fails closed: a policy it can't read (`jsonencode`, `file()`, variables), any API error, or more than 20 changed policies is a FAIL. The job's exit code is the gate.
+6. Claude gets the policy and findings as untrusted data and writes an advisory explanation and suggested rewrite. This section appears only when `ANTHROPIC_API_KEY` is set; the LLM call itself is not implemented yet.
+7. The report is posted as a single PR comment that's updated on each run (`gh pr comment --edit-last --create-if-none`).
 
 ## Security design
 - **OIDC role scoped to one repo + `pull_request` only**, exact-match `sub` claim, 1-hour sessions, region-locked.
@@ -43,7 +43,7 @@ terraform init && terraform apply
 # 2. In GitHub: Settings > Secrets and variables > Actions
 #    Secret   AWS_ROLE_ARN = <role_arn output>
 #    Secret   ANTHROPIC_API_KEY
-# 3. Open a PR that changes examples/risky-change/main.tf
+# 3. Open a PR that widens examples/demo/main.tf (e.g. add "iam:PassRole" on "*")
 
 # Teardown
 terraform destroy
