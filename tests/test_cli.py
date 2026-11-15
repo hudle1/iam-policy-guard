@@ -220,7 +220,8 @@ def test_trust_policy_checked_as_resource_policy(gitrepo, guard):
     assert fake.called("check_access_not_granted") == []
 
     assert code == 1  # new principal added -> CheckNoNewAccess FAIL
-    assert f"| `{trust_id}` | CheckAccessNotGranted | Skipped (resource policy) |" in report
+    section = report.split(f"### `{trust_id}`", 1)[1].split("\n## ", 1)[0]
+    assert "| CheckAccessNotGranted | Skipped (resource policy) |" in section
     assert "CheckAccessNotGranted was skipped for them" in report
     assert "`infra/main.tf::data.aws_iam_policy_document.app`" in report  # listed unchanged
 
