@@ -119,7 +119,15 @@ _To be added._ Includes enabling secret scanning and push protection **before** 
 
 ## Phase 6: Deploy the OIDC role and connect GitHub
 
-_To be added._ Summary: `cd infra && cp terraform.tfvars.example terraform.tfvars`, fill it in, `terraform init && terraform apply`, then set the repo Actions variable `AWS_ROLE_ARN`.
+_To be added._ Summary: `cd infra && cp terraform.tfvars.example terraform.tfvars`, fill it in, `terraform init && terraform apply`, then set the repo Actions secret `AWS_ROLE_ARN`.
+
+**Pitfall: GitHub's immutable OIDC subject.** Repos created after July 15, 2026 use an immutable subject format that includes numeric IDs: `repo:OWNER@OWNER_ID/REPO@REPO_ID:pull_request` instead of `repo:OWNER/REPO:pull_request`. If the trust policy expects the old form, the workflow fails at "Configure AWS credentials" with `Not authorized to perform sts:AssumeRoleWithWebIdentity`. To find your IDs, run:
+
+```
+gh api repos/OWNER/REPO/actions/oidc/customization/sub
+```
+
+The `sub_claim_prefix` field looks like `repo:OWNER@OWNER_ID/REPO@REPO_ID`. Put the two numbers in `terraform.tfvars` as `github_owner_id` and `github_repo_id`. They're public, and they never change, even if the repo is renamed.
 
 ## Phase 7: Anthropic API key
 

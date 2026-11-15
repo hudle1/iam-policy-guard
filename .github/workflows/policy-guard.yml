@@ -39,7 +39,7 @@ jobs:
       - name: Configure AWS credentials (OIDC, no keys)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}  # secret so the account ID is masked in logs
           aws-region: us-east-1
           role-session-name: policy-guard-pr-${{ github.event.pull_request.number }}
 
@@ -48,9 +48,18 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: python -m iam_policy_guard --base "$BASE_SHA" --head "$HEAD_SHA" --report report.md
+        # --exclude replaces the default list, so tests/fixtures/ is repeated here.
+        # infra/ is the guard's own bootstrap role. Its policies use Terraform references
+        # (locals, variables) that static parsing can't resolve, so it would always fail
+        # closed. Excluded files are still listed as skipped in the report.
+        run: >-
+          python -m iam_policy_guard --base "$BASE_SHA" --head "$HEAD_SHA" --report report.md
+          --exclude tests/fixtures/ --exclude infra/
 
       # Verdict = exit code of the step above (Access Analyzer only). The LLM text is advisory.
+      # Sticky comment: --create-if-none needs gh >= 2.68.0 (runner ubuntu-24.04 ships 2.103.x).
+      # --edit-last edits the newest github-actions[bot] comment, so keep this the only
+      # workflow that comments on PRs.
       - name: Comment report on PR
         if: always() && hashFiles('report.md') != ''
         env:

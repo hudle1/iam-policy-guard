@@ -1,5 +1,5 @@
 output "role_arn" {
-  description = "Set this as the repo Actions variable AWS_ROLE_ARN (Settings > Secrets and variables > Actions > Variables)."
+  description = "Set this as the repo Actions secret AWS_ROLE_ARN (Settings > Secrets and variables > Actions > Secrets)."
   value       = aws_iam_role.gha.arn
 }
 

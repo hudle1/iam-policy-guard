@@ -4,6 +4,11 @@ variable "region" {
   default     = "us-east-1"
 }
 
+variable "aws_account_id" {
+  description = "Sandbox account ID; Terraform refuses to run against any other account"
+  type        = string
+}
+
 variable "aws_profile" {
   description = "Local AWS CLI profile used to apply (use an IAM Identity Center/SSO profile, not access keys)."
   type        = string
@@ -19,6 +24,16 @@ variable "github_repo" {
   description = "Repository name (without owner)."
   type        = string
   default     = "iam-policy-guard"
+}
+
+variable "github_owner_id" {
+  description = "Numeric GitHub owner ID. Public and immutable (survives renames); used in GitHub's immutable OIDC subject. Find it with: gh api repos/OWNER/REPO/actions/oidc/customization/sub (the number after the owner's @ in sub_claim_prefix)."
+  type        = number
+}
+
+variable "github_repo_id" {
+  description = "Numeric GitHub repository ID. Public and immutable (survives renames); used in GitHub's immutable OIDC subject. Find it with: gh api repos/OWNER/REPO/actions/oidc/customization/sub (the number after the repo's @ in sub_claim_prefix)."
+  type        = number
 }
 
 variable "create_oidc_provider" {

@@ -1,10 +1,15 @@
 locals {
   oidc_host = "token.actions.githubusercontent.com"
 
-  # Exact match: only workflows triggered by `pull_request` in this one repo.
+  # Exact match (StringEquals): only workflows triggered by `pull_request` in this one repo.
   # Pushes, other branches' workflow_dispatch, other repos and forks cannot assume the role.
   # (Fork PRs never get an OIDC token under `pull_request` anyway.)
-  oidc_subject = "repo:${var.github_owner}/${var.github_repo}:pull_request"
+  #
+  # GitHub's immutable subject format embeds the numeric owner and repo IDs. Names can be
+  # reused: if this repo or account were renamed or deleted, someone could create a new
+  # repo with the same name and, under a name-only subject, assume this role. The IDs are
+  # never reused, so a look-alike repo gets a different subject and is rejected.
+  oidc_subject = "repo:${var.github_owner}@${var.github_owner_id}/${var.github_repo}@${var.github_repo_id}:pull_request"
 
   oidc_provider_arn = var.create_oidc_provider ? aws_iam_openid_connect_provider.github[0].arn : data.aws_iam_openid_connect_provider.github[0].arn
 }
