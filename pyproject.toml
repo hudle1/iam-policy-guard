@@ -11,7 +11,7 @@ license = { text = "MIT" }
 dependencies = [
   "boto3>=1.34",
   "anthropic>=0.40",
-  "python-hcl2>=4.3",
+  "python-hcl2>=8,<9",  # extract.py depends on the 8.x output shape
 ]
 
 [project.optional-dependencies]
