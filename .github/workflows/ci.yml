@@ -36,19 +36,29 @@ jobs:
       - run: terraform init -backend=false
       - run: terraform validate
 
-  security-scan:
+  secrets-scan:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
+      - name: Gitleaks (secrets)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  iac-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
           persist-credentials: false
       - name: Checkov (IaC)
         uses: bridgecrewio/checkov-action@v12
         with:
           directory: infra
           framework: terraform
-      - name: Gitleaks (secrets)
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
