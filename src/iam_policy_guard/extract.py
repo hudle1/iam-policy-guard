@@ -15,8 +15,10 @@ caller can fail closed.
 Shape notes (python-hcl2 8.x, confirmed with a probe): block type/name keys and string
 values keep their HCL double quotes, every block carries an `__is_block__` key, nested
 blocks are lists of dicts, heredocs come back as '"<<EOF\\n...\\nEOF"', and expressions
-come back as '${...}'. The helpers below also accept unquoted strings so a future hcl2
-release that strips quotes keeps working.
+come back as '${...}'. Comments are attached to the enclosing block as `__comments__`
+(own-line and trailing) and `__inline_comments__` (comments inside a list value); list
+values themselves stay clean. The helpers below also accept unquoted strings so a future
+hcl2 release that strips quotes keeps working.
 """
 
 from __future__ import annotations
@@ -33,8 +35,10 @@ INLINE_POLICY_RESOURCE_TYPES = frozenset(
     {"aws_iam_policy", "aws_iam_role_policy", "aws_iam_user_policy", "aws_iam_group_policy"}
 )
 
-_BLOCK_MARKER = "__is_block__"
-_DOC_KEYS = {"statement", "version", "policy_id", _BLOCK_MARKER}
+# Parser metadata, not policy content. Listed explicitly (not "any __dunder__ key") so an
+# unknown key from a future hcl2 release still makes the policy unsupported: fail closed.
+_METADATA_KEYS = frozenset({"__is_block__", "__comments__", "__inline_comments__"})
+_DOC_KEYS = {"statement", "version", "policy_id"} | _METADATA_KEYS
 _STATEMENT_KEYS = {
     "sid",
     "effect",
@@ -45,8 +49,9 @@ _STATEMENT_KEYS = {
     "principals",
     "not_principals",
     "condition",
-    _BLOCK_MARKER,
-}
+} | _METADATA_KEYS
+_PRINCIPAL_KEYS = {"type", "identifiers"} | _METADATA_KEYS
+_CONDITION_KEYS = {"test", "variable", "values"} | _METADATA_KEYS
 _LIST_FIELDS = {
     "actions": "Action",
     "not_actions": "NotAction",
@@ -141,7 +146,7 @@ def _principals(blocks: object) -> dict | str:
         raise _Unsupported("principals must be blocks")
     merged: dict[str, list[str]] = {}
     for b in blocks:
-        if set(b) - {"type", "identifiers", _BLOCK_MARKER}:
+        if set(b) - _PRINCIPAL_KEYS:
             raise _Unsupported("unexpected key in principals block")
         ptype = _unquote(b.get("type"))
         merged.setdefault(ptype, []).extend(_string_list(b.get("identifiers", [])))
@@ -155,7 +160,7 @@ def _conditions(blocks: object) -> dict:
         raise _Unsupported("condition must be blocks")
     out: dict[str, dict[str, list[str]]] = {}
     for b in blocks:
-        if set(b) - {"test", "variable", "values", _BLOCK_MARKER}:
+        if set(b) - _CONDITION_KEYS:
             raise _Unsupported("unexpected key in condition block")
         test, var = _unquote(b.get("test")), _unquote(b.get("variable"))
         out.setdefault(test, {}).setdefault(var, []).extend(_string_list(b.get("values", [])))

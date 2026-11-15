@@ -6,7 +6,12 @@ import subprocess
 
 import pytest
 
-from iam_policy_guard.extract import changed_tf_files, extract_policies
+from iam_policy_guard.extract import (
+    Extraction,
+    _extract_file,
+    changed_tf_files,
+    extract_policies,
+)
 
 FIXTURES = pathlib.Path(__file__).parent / "fixtures"
 
@@ -148,3 +153,74 @@ def test_bad_ref_raises_so_caller_can_fail_closed(repo):
         extract_policies(str(repo), "does-not-exist", ["a.tf"])
     with pytest.raises(ValueError):
         extract_policies(str(repo), "--output=/tmp/x", ["a.tf"])
+
+
+def test_comments_everywhere_are_ignored(repo):
+    """Comments in blocks, attributes, lists, principals and condition never change the policy.
+
+    Regression: python-hcl2 8.x attaches them as __comments__ / __inline_comments__ keys,
+    which used to make the whole document "unsupported".
+    """
+    sha = commit(repo, {"main.tf": "comments.tf"}, "comments")
+    result = extract_policies(str(repo), sha, ["main.tf"])
+
+    assert result.unsupported == {}
+    assert result.policies["main.tf::data.aws_iam_policy_document.commented"] == {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Sid": "ReadBucket",
+                "Effect": "Allow",
+                "Action": ["s3:GetObject", "s3:ListBucket", "s3:GetObjectTagging"],
+                "Resource": ["arn:aws:s3:::example-app-bucket/*"],
+                "Condition": {"StringEquals": {"aws:PrincipalAccount": ["111122223333"]}},
+            },
+            {
+                "Effect": "Allow",
+                "Action": ["sts:AssumeRole"],
+                "Principal": {"AWS": ["arn:aws:iam::111122223333:root"]},
+            },
+        ],
+    }
+    assert result.policies["main.tf::aws_iam_role_policy.commented_heredoc"]["Statement"] == [
+        {"Effect": "Allow", "Action": "sqs:SendMessage", "Resource": "*"}
+    ]
+
+
+@pytest.mark.parametrize("block", ["document", "statement", "principals", "condition"])
+def test_unknown_dunder_key_still_fails_closed(monkeypatch, block):
+    """Only the known metadata keys are ignored; anything new from hcl2 stays unsupported."""
+    import iam_policy_guard.extract as ex
+
+    real_loads = ex.hcl2.loads
+
+    def loads_with_extra_key(text):
+        parsed = real_loads(text)
+        doc = parsed["data"][0]['"aws_iam_policy_document"']['"x"']
+        stmt = doc["statement"][0]
+        target = {
+            "document": doc,
+            "statement": stmt,
+            "principals": stmt["principals"][0],
+            "condition": stmt["condition"][0],
+        }[block]
+        target["__future_metadata__"] = True
+        return parsed
+
+    monkeypatch.setattr(ex.hcl2, "loads", loads_with_extra_key)
+    tf = (
+        'data "aws_iam_policy_document" "x" {\n'
+        "  statement {\n"
+        '    actions = ["s3:GetObject"]\n'
+        '    resources = ["*"]\n'
+        '    principals {\n      type = "AWS"\n      identifiers = ["*"]\n    }\n'
+        '    condition {\n      test = "Bool"\n      variable = "aws:SecureTransport"\n'
+        '      values = ["true"]\n    }\n'
+        "  }\n"
+        "}\n"
+    )
+    out = Extraction()
+    _extract_file("main.tf", tf, out)
+
+    assert out.policies == {}
+    assert "main.tf::data.aws_iam_policy_document.x" in out.unsupported
