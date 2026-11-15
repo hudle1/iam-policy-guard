@@ -41,7 +41,7 @@ cd infra
 cp terraform.tfvars.example terraform.tfvars   # edit values
 terraform init && terraform apply
 # 2. In GitHub: Settings > Secrets and variables > Actions
-#    Variable AWS_ROLE_ARN = <role_arn output>
+#    Secret   AWS_ROLE_ARN = <role_arn output>
 #    Secret   ANTHROPIC_API_KEY
 # 3. Open a PR that changes examples/risky-change/main.tf
 

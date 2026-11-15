@@ -119,7 +119,7 @@ _To be added._ Includes enabling secret scanning and push protection **before** 
 
 ## Phase 6: Deploy the OIDC role and connect GitHub
 
-_To be added._ Summary: `cd infra && cp terraform.tfvars.example terraform.tfvars`, fill it in, `terraform init && terraform apply`, then set the repo Actions variable `AWS_ROLE_ARN`.
+_To be added._ Summary: `cd infra && cp terraform.tfvars.example terraform.tfvars`, fill it in, `terraform init && terraform apply`, then set the repo Actions secret `AWS_ROLE_ARN`.
 
 ## Phase 7: Anthropic API key
 
